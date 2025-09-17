@@ -19,26 +19,95 @@ def get_telegram_ids():
         response = requests.get(nomenclator_url, headers=headers)
         if response.status_code == 200:
             data = response.json()
-            print(data) 
-
             
-            # --- LÍNEA PARA DEBUGGING ---
-            # Descomenta esta línea para ver la estructura completa de los datos
-            # print("Estructura de la respuesta:", data)
+            # Mostrar las claves principales para debugging
+            print("Claves principales en la respuesta:", list(data.keys()))
             
-            # --- CAMBIO CLAVE: USAMOS LA CLAVE CORRECTA ---
-            ids = [item['idTelegrama'] for item in data['result']]
-            print(f"Lista de IDs obtenida. Total: {len(ids)}")
-            return ids
+            # Analizar la estructura de 'amb' que parece contener los datos
+            if 'amb' in data and len(data['amb']) > 0:
+                print("Estructura del primer elemento de 'amb':", list(data['amb'][0].keys()))
+                
+                # Veamos qué hay en 'ambitos'
+                first_amb = data['amb'][0]
+                if 'ambitos' in first_amb:
+                    print("Primer elemento de 'ambitos':", first_amb['ambitos'][:3] if len(first_amb['ambitos']) > 3 else first_amb['ambitos'])
+                    if len(first_amb['ambitos']) > 0:
+                        print("Estructura de un elemento de 'ambitos':", list(first_amb['ambitos'][0].keys()))
+                
+                # Buscar IDs de telegrama en la nueva estructura
+                telegram_ids = []
+                
+                for amb_item in data['amb']:
+                    if 'ambitos' in amb_item:
+                        for ambito in amb_item['ambitos']:
+                            # Buscar en diferentes posibles ubicaciones
+                            if 'm' in ambito:  # Si 'm' está en este nivel
+                                for mesa in ambito['m']:
+                                    if 'i' in mesa:
+                                        telegram_ids.append(mesa['i'])
+                            elif 'i' in ambito and 'l' in ambito:  # Si el ambito mismo es una mesa
+                                if ambito['l'] == 70:  # Nivel 70 = Mesa según 'levels'
+                                    telegram_ids.append(ambito['i'])
+                
+                print(f"Total de IDs encontrados: {len(telegram_ids)}")
+                return telegram_ids
+            else:
+                print("No se encontró la estructura esperada en la respuesta")
+                return []
+            
         else:
             print(f"Error {response.status_code} al obtener la lista de IDs.")
             return []
     except requests.exceptions.RequestException as e:
         print(f"Ocurrió un error de conexión: {e}")
         return []
+    except json.JSONDecodeError as e:
+        print(f"Error al decodificar JSON: {e}")
+        return []
+    except KeyError as e:
+        print(f"Error: Clave no encontrada: {e}")
+        print("Estructura completa de la respuesta:")
+        print(json.dumps(data, indent=2)[:1000] + "..." if len(json.dumps(data, indent=2)) > 1000 else json.dumps(data, indent=2))
+        return []
 
-# Ejemplo de uso:
+def save_structure_to_file(data, filename="response_structure.json"):
+    """
+    Guarda la estructura completa de la respuesta en un archivo para análisis
+    """
+    try:
+        with open(filename, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        print(f"Estructura guardada en {filename}")
+    except Exception as e:
+        print(f"Error al guardar archivo: {e}")
+
+# Ejemplo de uso mejorado:
 if __name__ == "__main__":
-    telegram_ids = get_telegram_ids()
-    if telegram_ids:
-        print("Primeros 5 IDs:", telegram_ids[:5])
+    print("Iniciando scraping de datos electorales...")
+    
+    try:
+        response = requests.get(nomenclator_url, headers=headers)
+        if response.status_code == 200:
+            data = response.json()
+            
+            # Guardar la estructura completa para análisis
+            save_structure_to_file(data)
+            
+            # Obtener IDs
+            telegram_ids = get_telegram_ids()
+            
+            if telegram_ids:
+                print("Primeros 10 IDs:", telegram_ids[:10])
+                print("Últimos 5 IDs:", telegram_ids[-5:])
+                
+                # Guardar los IDs en un archivo
+                with open("telegram_ids.json", "w") as f:
+                    json.dump(telegram_ids, f)
+                print(f"IDs guardados en telegram_ids.json")
+            else:
+                print("No se pudieron obtener los IDs")
+        else:
+            print(f"Error {response.status_code} en la petición inicial")
+            
+    except Exception as e:
+        print(f"Error general: {e}")
